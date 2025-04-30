@@ -1,0 +1,148 @@
+# The eks_admin/main.tf is your way of custom-controlling who gets access to the EKS cluster via IAM.
+
+# Configure Kubernetes provider using EKS outputs
+provider "kubernetes" {
+  host                   = var.cluster_endpoint
+  cluster_ca_certificate = base64decode(var.cluster_ca)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", var.cluster_name] # Auth via AWS CLI
+  }
+}
+
+
+# Map IAM roles to Kubernetes users/groups in the aws-auth ConfigMap
+resource "kubernetes_config_map" "aws_auth" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+  data = {
+    mapRoles = yamlencode([
+      {
+        rolearn  = var.node_role_arn                    # IAM Role for worker nodes
+        username = "system:node:{{EC2PrivateDNSName}}"  # Templated name for worker nodes(ec2) joining the cluster
+        groups   = ["system:bootstrappers", "system:nodes"]
+      },
+      {
+        rolearn  = var.eks_admin_role_arn               # IAM Principal to assign eks permission to
+        username = "eks-admin"                          # Name kubernetes gives to this IAM Principal
+        groups   = ["system:masters"]                   # system:masters implicitly provides cluster-admin privileges
+      },
+      {
+        rolearn = var.dev_role_arn
+        username = "developer"                          # How Kubernetes will refer to this IAM role
+        groups   = ["dev-viewers"]                      # The RBAC group to assign inside the cluster. Read-only for developers
+      },
+      {
+        rolearn = var.cicd_role_arn
+        username = "cicd"                               # How Kubernetes will refer to this IAM role
+        groups   = ["prod-editors"]                     # The RBAC group to assign inside the cluster. Edit for DevOps
+      }
+    ])
+  }
+}
+
+
+# Optional: Bind the "system:masters" group to the cluster-admin role
+# Optional because in EKS, system:masters is implicitly treated as cluster-admin.
+resource "kubernetes_cluster_role_binding" "admin" {
+  metadata {
+    name = "admin-binding"                    # Name of the binding
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"                 # References the predefined `cluster-admin` ClusterRole, which is a built-in Kubernetes role.
+    name      = "cluster-admin"               # This is the highest privilege role in Kubernetes
+  }
+  
+  # This tells Kubernetes: “If a user belongs to system:masters, give them the cluster-admin role, which is full power over the cluster.”
+  subject {
+    kind      = "Group"
+    name      = "system:masters"              # This is the group our IAM role was mapped to via aws-auth
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
+
+
+# Prod Namespace - CI/CD (edit access)
+resource "kubernetes_role_binding" "prod_editors" {
+  # Ensure namespace is created before binding
+  depends_on = [ kubernetes_namespace.prod ]
+
+  metadata {
+    name      = "prod-editors-binding"     # Binding name
+    namespace = kubernetes_namespace.prod.metadata[0].name  # Prod namespace only
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"              # eferences the predefined `edit` ClusterRole, which is a built-in Kubernetes role.
+    name      = "edit"                     # Predefined cluster role that allows read/write access
+  }
+
+  # Connects the RBAC permission to your IAM role via the mapped group in aws-auth.
+  subject {
+    kind      = "Group"
+    name      = "prod-editors"             # Group mapped in aws-auth
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
+
+
+# Dev Namespace - Developers (read-only)
+resource "kubernetes_role_binding" "dev_viewers" {
+  # Ensure namespace is created before binding
+  depends_on = [ kubernetes_namespace.dev ]
+
+  metadata {
+    name      = "dev-viewers-binding"      # Binding name
+    namespace = kubernetes_namespace.dev.metadata[0].name  # Dev namespace only, created in namespaces.tf
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"              # eferences the predefined `view` ClusterRole, which is a built-in Kubernetes role.
+    name      = "view"                     # Predefined cluster role that allows read-only access
+  }
+
+  subject {
+    kind      = "Group"
+    name      = "dev-viewers"              # Group mapped in aws-auth
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
+
+# Custom Role for developers to view RBAC resources in the dev namespace
+# If developers frequently debug or audit RBAC configurations (e.g., checking rolebindings or roles in the dev namespace),
+# enable the view-rbac Role (namespace-scoped) to allow developers to debug RBAC issues in the dev namespace
+resource "kubernetes_role" "view_rbac" {
+  metadata {
+    name      = "view-rbac"
+    namespace = kubernetes_namespace.dev.metadata[0].name
+  }
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources  = ["rolebindings", "roles"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+# Bind the view-rbac Role to the dev-viewers group
+resource "kubernetes_role_binding" "dev_viewers_rbac" {
+  metadata {
+    name      = "dev-viewers-rbac-binding"
+    namespace = kubernetes_namespace.dev.metadata[0].name
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"      # References the custom view-rbac Role defined in the same module
+    name      = "view-rbac"
+  }
+  subject {
+    kind      = "Group"
+    name      = "dev-viewers"
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
