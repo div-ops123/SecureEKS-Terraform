@@ -36,8 +36,17 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Specific files and directories from your project
+aws/
+awscliv2.zip
+guide.md
+kubectl
+kubectl.sha256
+.env
+.env.dev
 .terraform.lock.hcl
-.env*
-aws*
-guide*
-kubectl*
+
+# Editor and temporary files (optional, for future-proofing)
+*.bak
+*.tmp
+*.swp
