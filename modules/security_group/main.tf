@@ -5,6 +5,20 @@ resource "aws_security_group" "eks_nodes" {
   tags        = merge(var.common_tags, {Name = "eks-node-sg"})
 }
 
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Security group for ALB"
+  vpc_id      = var.vpc_id
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "alb-sg"
+      "elbv2.k8s.aws/cluster" = var.cluster_name  # Auto-detection by ALB Controller
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    }
+  )
+}
+
 
 # Allow control plane -> worker nodes (for kubelet / webhook)
 resource "aws_vpc_security_group_ingress_rule" "from_control_plane" {
@@ -26,14 +40,13 @@ resource "aws_vpc_security_group_ingress_rule" "node_to_node" {
   description       = "Allow communication between worker nodes"
 }
 
-# Access apps on this port range(30000-32767)
-resource "aws_vpc_security_group_ingress_rule" "nodeport_access" {
-  security_group_id = aws_security_group.eks_nodes.id
-  from_port         = 30000
-  to_port           = 32767
-  ip_protocol       = "tcp"
-  cidr_ipv4         = "0.0.0.0/0"
-  description       = "Allow NodePort traffic to worker nodes"
+resource "aws_vpc_security_group_ingress_rule" "node_from_alb" {
+  security_group_id            = aws_security_group.node_sg.id
+  from_port                    = 80
+  to_port                      = 80
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = aws_security_group.alb_sg.id
+  description                  = "Allow ALB to node traffic"
 }
 
 # Allow HTTPS for image pulls etc.
@@ -53,3 +66,33 @@ resource "aws_vpc_security_group_egress_rule" "all_outbound" {
   cidr_ipv4         = "0.0.0.0/0"
   description       = "Allow all outbound traffic"
 }
+
+
+# alb controller sg
+
+# inbound 80/443 traffic
+resource "aws_vpc_security_group_ingress_rule" "alb_http_access" {
+  security_group_id = aws_security_group.alb_sg.id
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Allow HTTP traffic to ALB"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "alb_https_access" {
+  security_group_id = aws_security_group.alb_sg.id
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Allow HTTPS traffic to ALB"
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_all_outbound" {
+  security_group_id = aws_security_group.alb_sg.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Allow all outbound traffic"
+}
+

@@ -1,3 +1,8 @@
+variable "cluster_name" {
+  description = "The name of the EKS cluster, used to authenticate and configure kubectl access."
+  type        = string
+}
+
 variable "private_subnet_ids" {
   type = list(string)
 }

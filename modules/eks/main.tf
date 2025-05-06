@@ -1,9 +1,9 @@
 resource "aws_eks_cluster" "main" {
-  name = "my-first-cluster" # Name of the EKS cluster
+  name = var.cluster_name # Name of the EKS cluster
   role_arn = var.eks_cluster_role_arn  # IAM role the cluster will use (already created)
   vpc_config {
     # subnet_ids defines where the cluster will create the networking components (like control plane ENIs)
-    subnet_ids = var.private_subnet_ids  # <-- You'll pass this from root module by reading VPC module output
+    subnet_ids = var.private_subnet_ids
   }
 
   # This ensures the IAM policy is attached BEFORE creating the cluster

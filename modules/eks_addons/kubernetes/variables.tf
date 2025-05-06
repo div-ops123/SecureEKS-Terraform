@@ -1,10 +1,6 @@
 variable "common_tags" {
   description = "Tags used to identify resources provisioned by Terraform in this project."
   type = map(string)
-  default = {
-    Terraform   = "true"
-    Project = "eks-clw1"
-  }
 }
 
 # The name of the EKS cluster
@@ -50,6 +46,11 @@ variable "dev_role_arn" {
 
 variable "cicd_role_arn" {
   description = "The ARN of the IAM role used by CI/CD tools, to get access to EKS cluster."
+  type        = string
+}
+
+variable "alb_role_arn" {
+  description = "The ARN of the ALB IAM role."
   type        = string
 }
 

@@ -18,3 +18,8 @@ variable "cluster_control_plane_cidr" {
   type        = string
   default     = "0.0.0.0/0"
 }
+
+variable "cluster_name" {
+  description = "The name of the EKS cluster, used to authenticate and configure kubectl access."
+  type        = string
+}

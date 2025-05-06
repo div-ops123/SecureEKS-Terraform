@@ -1,6 +1,16 @@
 resource "aws_vpc" "main" {
   cidr_block = var.cidr_block
-  tags = merge(var.common_tags, {Name = "eks-vpc"})
+  # to resolve internal hostnames (e.g., for Kubernetes services)
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = merge(
+    var.common_tags, 
+    {
+      Name = "eks-vpc"
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"    
+      # "shared" indicates the VPC may be used by multiple clusters or resources, while "owned" is used if dedicated to one cluster
+    })
 }
 
 
@@ -13,7 +23,14 @@ resource "aws_subnet" "public" {
   cidr_block              = var.public_subnets[count.index]  # range of ips
   availability_zone       = element(var.AZs, count.index)    # picks AZ by index
   map_public_ip_on_launch = true                             # auto signs a public IP to instances launched in this subnet
-  tags                    = merge(var.common_tags, {Name = "public-subnet-${count.index + 1}"})
+  tags                    = merge(
+    var.common_tags, 
+    {
+      Name                        = "public-subnet-${count.index + 1}"
+      # Tag for ALB Controller to discover public subnets
+      "kubernetes.io/role/elb"    = "1"  # Indicates the subnet is eligible for internet-facing ALBs
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    })
 }
 
 
@@ -25,7 +42,15 @@ resource "aws_subnet" "private" {
   vpc_id                  = aws_vpc.main.id                   # vpc to place the subnet in
   cidr_block              = var.private_subnets[count.index]  # range of ips
   availability_zone       = element(var.AZs, count.index)     # picks AZ by index
-  tags                    = merge(var.common_tags, {Name = "private-subnet-${count.index + 1}"})
+  tags                    = merge(
+    var.common_tags, 
+    {
+      Name                              = "private-subnet-${count.index + 1}"
+      # required for the ALB Controller to discover private subnets for creating internal ALBs 
+      # (not applicable for your internet-facing ALB, but useful for future internal services)
+      "kubernetes.io/role/internal-elb" = "1"  # Indicates the subnet is eligible for internal ALBs
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    })
 }
 
 

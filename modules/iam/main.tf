@@ -77,6 +77,105 @@ resource "aws_iam_group_policy" "developers_assume_role_policy" {
 
 
 # -----------------------IAM Roles------------------------
+# Fetch EKS cluster OIDC issuer URL, required for IRSA.
+data "aws_eks_cluster" "cluster" {
+  name = var.eks_cluster_name
+}
+
+# Congiure eks cluster with an OIDC to authenticate service account
+resource "aws_iam_openid_connect_provider" "eks_oidc" {
+  url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
+  client_id_list = ["sts.amazonaws.com"]
+  # For production, manually retrieve and verify the thumbprint to ensure security. For now skip
+  # Automate Thumbprint Retrieval using scripts
+  # https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
+  # thumbprint_list = [<thumbprint>]
+}
+
+
+# Create the IAM policy for ALB Controller (equivalent to iam-policy.json)
+# Or download here: curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/install/iam_policy.json
+resource "aws_iam_policy" "alb_controller_policy" {
+  name        = "AWSLoadBalancerControllerIAMPolicy"
+  description = "Policy for AWS Load Balancer Controller to manage ALBs"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress"
+        ]
+        Resource = "*"
+        Condition = {
+          Null = {
+            "aws:ResourceTag/kubernetes.io/cluster/${var.eks_cluster_name}" = "false"
+          }
+        }
+      },
+      # Add other permissions from iam-policy.json (abridged for brevity)
+      {
+        Effect = "Allow"
+        Action = [
+          "acm:DescribeCertificate",
+          "acm:ListCertificates",
+          "acm:GetCertificate",
+          "ec2:CreateSecurityGroup",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ec2:Describe*",
+          "elasticloadbalancing:*",
+          "iam:CreateServiceLinkedRole",
+          "waf-regional:*",
+          "wafv2:*",
+          "shield:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# IAM Role for AWS Load Balancer Controller
+resource "aws_iam_role" "alb_role" {
+  name        = "${var.eks_cluster_name}-alb-controller"
+  description = "IAM Role for AWS Load Balancer Controller to manage ALBs"
+
+  # IRSA trust policy specifig whi can assume role. In our case the controller's service account
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = "arn:aws:iam::${var.aws_account_id}:oidc-provider/${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}"
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(var.common_tags, {
+    Name    = "EKSALBRole"
+    Purpose = "EKS Cluster ALB Access"
+  })
+}
+
+# Attach the custom ALB Controller policy
+resource "aws_iam_role_policy_attachment" "alb_role_policy" {
+  role       = aws_iam_role.alb_role.name
+  policy_arn = aws_iam_policy.alb_controller_policy.arn
+}
+
+
+
 # IAM Role for EKS Admins (EKSAdminRole)
 resource "aws_iam_role" "eks_admin_role" {
   depends_on = [ aws_iam_group.eks_admin_group ]
@@ -90,7 +189,7 @@ resource "aws_iam_role" "eks_admin_role" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        AWS = "arn:aws:iam::140023408689:root"
+        AWS = var.aws_root_account
       }
       Action = "sts:AssumeRole"
     }]
@@ -138,7 +237,7 @@ resource "aws_iam_role" "eks_dev_role" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::140023408689:root"
+          AWS = var.aws_root_account
         }
         Action = "sts:AssumeRole"
         Condition = {}

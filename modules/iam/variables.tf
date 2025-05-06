@@ -1,15 +1,17 @@
 variable "common_tags" {
   description = "Tags used to identify resources provisioned by Terraform in this project."
   type = map(string)
-  default = {
-    Terraform   = "true"
-    Project = "eks-clw1"
-  }
 }
 
 # AWS Account ID
 variable "aws_account_id" {
   description = "The AWS account ID where the IAM roles will be created"
+  type        = string
+}
+
+# AWS Account ID
+variable "aws_root_account" {
+  description = "The AWS account for root"
   type        = string
 }
 

@@ -6,7 +6,8 @@ module "vpc" {
   source = "./modules/vpc"
 
   # Optionally override variables if needed
-  AZs    = data.aws_availability_zones.available.names
+  AZs         = data.aws_availability_zones.available.names
+  common_tags = var.common_tags
 }
 
 module "sg" {
@@ -20,6 +21,7 @@ module "eks" {
   source               = "./modules/eks"
 
   # Optionally override variables if needed
+  cluster_name = var.cluster_name
   private_subnet_ids   = module.vpc.private_subnets
   worker_sg_id         = module.sg.eks_nodes_sg_id
   eks_cluster_role_arn = module.iam.eks_cluster_role_arn
@@ -36,16 +38,18 @@ module "iam" {
   eks_cluster_name     = module.eks.cluster_name
   cluster_arn          = module.eks.cluster_arn
   aws_account_id       = var.aws_account_id
+  aws_root_account     = var.aws_root_account 
   github_org_repo_name = var.github_org_repo_name
   eks_admin_user_name  = "daniel"
   eks_dev_user_name    = "mathins"
+  common_tags          = var.common_tags
 }
 
 
 # Without eks_admin module, AWS EKS automatically grants full admin access (system:masters) to the IAM entity that created the cluster
 # UUNCOMMENT this only when you want to give admin access to additional iam principal
-module "eks_admin" {
-  source                          = "./modules/eks_admin"
+module "eks_addons" {
+  source                          = "./modules/eks_addons/kubernetes"
 
   # Optionally override variables if needed
   cluster_name                    = module.eks.cluster_name
@@ -56,5 +60,6 @@ module "eks_admin" {
   eks_admin_role_arn              = module.iam.eks_admin_role_arn
   dev_role_arn                    = module.iam.eks_dev_role_arn
   cicd_role_arn                   = module.iam.eks_cicd_role_arn
+  alb_role_arn                    = module.iam.alb_role_arn
 }
 

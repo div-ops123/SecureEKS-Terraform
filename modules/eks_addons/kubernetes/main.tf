@@ -1,19 +1,34 @@
-# The eks_admin/main.tf is your way of custom-controlling who gets access to the EKS cluster via IAM.
+# --- RBAC roles and Service Accounts ---
 
-# Configure Kubernetes provider using EKS outputs
-provider "kubernetes" {
-  host                   = var.cluster_endpoint
-  cluster_ca_certificate = base64decode(var.cluster_ca)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", var.cluster_name] # Auth via AWS CLI
+# Service Accounnts with IRSA
+
+# The `aws-load-balancer-controller` Service Account is used by the ALB Controller pods to assume the IAM role via IRSA and manage ALBs.
+resource "kubernetes_service_account" "alb_controller_service_account" {
+  metadata {
+    name      = "aws-load-balancer-controller"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = var.alb_role_arn
+    }
+  }
+}
+
+resource "kubernetes_service_account" "devops_learning_service_account" {
+  metadata {
+    name = "parameter-store"
+    namespace = ""
+    annotations = {
+      "eks.amazonaws.com/role-arn" = ""
+    }
   }
 }
 
 
+# RBAC Roles: Is your way of custom-controlling who gets access to the EKS cluster via IAM.
+
 # Map IAM roles to Kubernetes users/groups in the aws-auth ConfigMap
-resource "kubernetes_config_map" "aws_auth" {
+# resource "kubernetes_config_map" "aws_auth" {
+resource "kubernetes_config_map_v1_data" "aws_auth_patch" {
   metadata {
     name      = "aws-auth"
     namespace = "kube-system"
@@ -42,6 +57,7 @@ resource "kubernetes_config_map" "aws_auth" {
       }
     ])
   }
+  force = true
 }
 
 

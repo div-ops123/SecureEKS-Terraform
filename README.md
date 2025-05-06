@@ -4,7 +4,7 @@ This project, provisions an AWS Elastic Kubernetes Service (EKS) cluster using T
 
 ## Features
 
-- **Modular Terraform Structure**: Organized into reusable modules for VPC, IAM, EKS, security groups, and RBAC configuration.
+- **Modular Terraform Structure**: Organized into reusable modules for VPC, IAM, EKS, security groups, IRSA, and RBAC configuration.
 - **IAM Roles**:
   - Administrator: Full cluster access via `system:masters`.
   - Developer: Read-only access (`view`) in the `dev` namespace, with RBAC debugging capabilities.
@@ -46,8 +46,14 @@ This project deploys a secure EKS cluster in a custom VPC with public and privat
 - **RBAC**:
   - `dev` namespace: Read-only for developers.
   - `prod` namespace: Read/write for CI/CD pipelines.
+- **IRSA**:
+
 - **State Management**: Terraform state is stored in an S3 bucket with versioning and locked via DynamoDB.
 
+## ALB Configuration
+- Configured AWS Load Balancer Controller to provision an ALB for routing traffic to www.my-custom-domain.com.
+- Implemented health checks (/health) to ensure reliable traffic routing.
+- Provisioned an IRSA-enabled IAM role (EKSALBRole) using Terraform for secure ALB management.
 
 ## Contributing
 
