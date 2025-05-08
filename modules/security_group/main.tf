@@ -1,18 +1,18 @@
 resource "aws_security_group" "eks_nodes" {
-  name        = "eks-nodes-sg"
+  name        = "${var.cluster_name}-nodes-sg"
   description = "Security group for EKS worker nodes"
   vpc_id      = var.vpc_id
-  tags        = merge(var.common_tags, {Name = "eks-node-sg"})
+  tags        = merge(var.common_tags, {Name = "${var.cluster_name}-sg"})
 }
 
 resource "aws_security_group" "alb_sg" {
-  name        = "alb-sg"
+  name        = "${var.cluster_name}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = var.vpc_id
   tags = merge(
     var.common_tags,
     {
-      Name = "alb-sg"
+      Name = "${var.cluster_name}-sg"
       "elbv2.k8s.aws/cluster" = var.cluster_name  # Auto-detection by ALB Controller
       "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     }
@@ -41,7 +41,7 @@ resource "aws_vpc_security_group_ingress_rule" "node_to_node" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "node_from_alb" {
-  security_group_id            = aws_security_group.node_sg.id
+  security_group_id            = aws_security_group.eks_nodes.id
   from_port                    = 80
   to_port                      = 80
   ip_protocol                  = "tcp"
@@ -96,3 +96,27 @@ resource "aws_vpc_security_group_egress_rule" "alb_all_outbound" {
   description       = "Allow all outbound traffic"
 }
 
+
+# RDS sg
+resource "aws_security_group" "rds_security_group" {
+  name = "${var.cluster_name}-rds-sg"
+  description = "Allows EKS worker nodes to access RDS on port 5432"
+  vpc_id = var.vpc_id
+  tags = merge(var.common_tags, { Name = "${var.cluster_name}-sg" })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "worker_nodes_to_rds" {
+  security_group_id = aws_security_group.rds_security_group.id
+  from_port         = 5432
+  to_port           = 5432
+  ip_protocol       = "tcp"
+  referenced_security_group_id = aws_security_group.eks_nodes.id
+  description = "Allows EKS worker nodes to access RDS on port 5432"
+}
+
+resource "aws_vpc_security_group_egress_rule" "rds_engress" {
+  security_group_id = aws_security_group.rds_security_group.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+  description = "Allow rds to send traffic to anywhere"
+}

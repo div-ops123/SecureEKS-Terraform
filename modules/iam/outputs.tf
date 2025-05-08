@@ -61,9 +61,17 @@ output "eks_cluster_role_arn" {
   value = aws_iam_role.eks_cluster.arn
 }
 
-output "alb_role_arn" {
-  value = aws_iam_role.alb_role.arn
+output "alb_irsa_arn" {
+  value = aws_iam_role.alb_irsa.arn
 }
+
+output "devops_learning_irsa_arn" {
+  value = aws_iam_role.devops_learning_irsa.arn
+}
+
+# output "devops_learning_ascp_irsa_arn" {
+#   value = aws_iam_role.devops_learning_irsa.arn
+# }
 
 output "eks_node_group_arn" {
   value = aws_iam_role.eks_node.arn

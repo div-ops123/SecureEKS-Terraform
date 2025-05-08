@@ -1,8 +1,3 @@
-variable "common_tags" {
-  description = "Tags used to identify resources provisioned by Terraform in this project."
-  type = map(string)
-}
-
 # The name of the EKS cluster
 variable "cluster_name" {
   description = "The name of the EKS cluster, used to authenticate and configure kubectl access."
@@ -49,9 +44,12 @@ variable "cicd_role_arn" {
   type        = string
 }
 
-variable "alb_role_arn" {
-  description = "The ARN of the ALB IAM role."
+variable "alb_irsa_arn" {
+  description = "The IRSA ARN with permissions to manage ALB."
   type        = string
 }
 
-
+variable "devops_learning_irsa_arn" {
+  description = "The IRSA ARN with permissions to read Parameter Store parameters."
+  type        = string
+}

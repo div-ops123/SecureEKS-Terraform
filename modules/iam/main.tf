@@ -80,6 +80,7 @@ resource "aws_iam_group_policy" "developers_assume_role_policy" {
 # Fetch EKS cluster OIDC issuer URL, required for IRSA.
 data "aws_eks_cluster" "cluster" {
   name = var.eks_cluster_name
+  depends_on = [ var.cluster_arn ]  # ensures the eks cluster is created first.
 }
 
 # Congiure eks cluster with an OIDC to authenticate service account
@@ -89,11 +90,11 @@ resource "aws_iam_openid_connect_provider" "eks_oidc" {
   # For production, manually retrieve and verify the thumbprint to ensure security. For now skip
   # Automate Thumbprint Retrieval using scripts
   # https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
-  # thumbprint_list = [<thumbprint>]
+  thumbprint_list = []  # Not required for EKS; AWS manages it
 }
 
 
-# Create the IAM policy for ALB Controller (equivalent to iam-policy.json)
+# IAM policy for ALB Controller
 # Or download here: curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/install/iam_policy.json
 resource "aws_iam_policy" "alb_controller_policy" {
   name        = "AWSLoadBalancerControllerIAMPolicy"
@@ -138,24 +139,26 @@ resource "aws_iam_policy" "alb_controller_policy" {
   })
 }
 
-# IAM Role for AWS Load Balancer Controller
-resource "aws_iam_role" "alb_role" {
-  name        = "${var.eks_cluster_name}-alb-controller"
-  description = "IAM Role for AWS Load Balancer Controller to manage ALBs"
+# IAM Role for IRSA (AWS Load Balancer Controller)
+resource "aws_iam_role" "alb_irsa" {
+  name        = "${var.eks_cluster_name}-alb-controller-irsa"
+  description = "IAM Role for AWS Load Balancer Controller ServiceAccount to manage ALBs"
 
-  # IRSA trust policy specifig whi can assume role. In our case the controller's service account
+  # IRSA trust policy specifig who can assume role. In our case the ALB controller's service account
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
+        # Allows the eks OIDC provider to assume this role        
         Principal = {
           Federated = "arn:aws:iam::${var.aws_account_id}:oidc-provider/${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}"
         }
         Action = "sts:AssumeRoleWithWebIdentity"
+        # On behalf of `aws-load-balancer-controller-sa` service account
         Condition = {
           StringEquals = {
-            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
+            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller-sa"
           }
         }
       }
@@ -163,17 +166,88 @@ resource "aws_iam_role" "alb_role" {
   })
 
   tags = merge(var.common_tags, {
-    Name    = "EKSALBRole"
-    Purpose = "EKS Cluster ALB Access"
+    Name    = "EKSALBIRSARole"
+    Purpose = "ALB Access for EKS cluster ALB Controller"
   })
 }
 
-# Attach the custom ALB Controller policy
+# Attach the ALB Controller Policy to the IRSA Role
 resource "aws_iam_role_policy_attachment" "alb_role_policy" {
-  role       = aws_iam_role.alb_role.name
+  role       = aws_iam_role.alb_irsa.name
   policy_arn = aws_iam_policy.alb_controller_policy.arn
 }
 
+
+# --- START ---
+# IAM Policy for Parameter Store Access
+resource "aws_iam_policy" "parameter_store_policy" {
+  name = "DevopsLearningParameterStorePolicy"
+  description = "Policy for accessing Parameter Store parameters for DevOps Learning app"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+        ]
+        Resource = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/devops-learning/*"        
+      }
+    ]
+  })
+}
+
+# IAM Role for IRSA (Parameter Store Access) - Defines who can assume this role
+resource "aws_iam_role" "devops_learning_irsa" {
+  name = "${var.eks_cluster_name}-devops-learning-irsa"
+  description = "IAM Role for DevOps Learning ASCP ServiceAccount to access Parameter Store"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        # Allows the eks OIDC provider to assume this role
+        Principal = {
+          Federated = "arn:aws:iam::${var.aws_account_id}:oidc-provider/${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}"
+        }
+        Action = "sts.AssumeRoleWithWebIdentity"
+        # On behalf of `secrets-provider-aws-sa` service account
+        Condition = {
+          StringEquals = {
+            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:secrets-provider-aws-sa"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(var.common_tags, {
+    Name    = "DevopsLearningIRSARole"
+    Purpose = "Parameter Store Access for DevOps Learning ASCP"
+  })
+}
+
+# Attach the Parameter Store Policy to the IRSA Role
+resource "aws_iam_role_policy_attachment" "devops_learning_irsa_policy" {
+  role = aws_iam_role.devops_learning_irsa.name
+  policy_arn = aws_iam_policy.parameter_store_policy.arn
+}
+
+# --- END ---
+
+
+# # --- START ---
+# resource "aws_iam_policy" "ascp_policy" {
+  
+# }
+
+# resource "aws_iam_role" "ascp_irsa" {
+  
+# }
+
+
+# --- END ---
 
 
 # IAM Role for EKS Admins (EKSAdminRole)

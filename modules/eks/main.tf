@@ -5,6 +5,8 @@ resource "aws_eks_cluster" "main" {
     # subnet_ids defines where the cluster will create the networking components (like control plane ENIs)
     subnet_ids = var.private_subnet_ids
   }
+  # Ensure OIDC is enabled
+  enabled_cluster_log_types = ["api", "audit"]
 
   # This ensures the IAM policy is attached BEFORE creating the cluster
   depends_on = [ var.eks_cluster_policy ]

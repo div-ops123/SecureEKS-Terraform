@@ -40,3 +40,7 @@ variable "eks_dev_user_name" {
   description = "IAM user to be added to eks-dev group"
   type        = string
 }
+
+variable "aws_region" {
+  type = string
+}

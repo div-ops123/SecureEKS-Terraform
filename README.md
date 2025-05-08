@@ -46,7 +46,9 @@ This project deploys a secure EKS cluster in a custom VPC with public and privat
 - **RBAC**:
   - `dev` namespace: Read-only for developers.
   - `prod` namespace: Read/write for CI/CD pipelines.
-- **IRSA**:
+## IRSA Configuration
+- Configured EKS OIDC provider using Terraform to enable IAM Roles for Service Accounts.
+- Integrated IRSA with the AWS Load Balancer Controller for secure ALB management.
 
 - **State Management**: Terraform state is stored in an S3 bucket with versioning and locked via DynamoDB.
 
@@ -72,3 +74,15 @@ Created by Divine Nwadigo.
 - Inspired by AWS best practices and Terraform documentation.
 
 ---
+```bash
+# Verify Helm releases:
+helm list -n kube-system
+
+# Confirm ASCP RBAC is enabled (default or manifest):
+kubectl get clusterrole secrets-provider-aws-role
+kubectl get clusterrolebinding secrets-provider-aws-binding
+
+# Apply
+terraform init
+terraform apply -var-file=secrets.tfvars
+```

@@ -27,3 +27,15 @@ variable "cluster_name" {
   type        = string
   default     = "my-first-cluster"
 }
+
+variable "aws_region" {
+  default = "af-south-1"
+}
+
+variable "instance_class" { default = "db.t3.micro" }
+variable "allocated_storage" { default = 20 }
+
+variable "db_name" { default = "devops_learning" }
+variable "db_username" { sensitive = true }
+variable "db_password" { sensitive = true }
+variable "secret_key" { sensitive = true }

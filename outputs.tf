@@ -4,14 +4,14 @@ output "vpc_id" {
   value       = module.vpc.vpc_id
 }
 
-output "public_subnets" {
+output "public_subnets_ids" {
   description = "List of public subnet IDs"
-  value       = module.vpc.public_subnets
+  value       = module.vpc.public_subnets_ids
 }
 
-output "private_subnets" {
+output "private_subnets_ids" {
   description = "List of private subnet IDs"
-  value       = module.vpc.private_subnets
+  value       = module.vpc.private_subnets_ids
 }
 
 # Security Group Outputs

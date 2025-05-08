@@ -1,16 +1,18 @@
 resource "aws_vpc" "main" {
-  cidr_block = var.cidr_block
-  # to resolve internal hostnames (e.g., for Kubernetes services)
+  cidr_block           = var.cidr_block
+  # Enable DNS hostnames and support to resolve internal hostnames (e.g., for Kubernetes services like ClusterIP)
   enable_dns_hostnames = true
   enable_dns_support   = true
 
   tags = merge(
-    var.common_tags, 
+    var.common_tags,
     {
-      Name = "eks-vpc"
-      "kubernetes.io/cluster/${var.cluster_name}" = "shared"    
-      # "shared" indicates the VPC may be used by multiple clusters or resources, while "owned" is used if dedicated to one cluster
-    })
+      Name = "${var.cluster_name}-eks-vpc"
+      # Tag to associate the VPC with the EKS cluster; resolved at Terraform apply time
+      # "shared" indicates the VPC may be used by multiple clusters or resources
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    }
+  )
 }
 
 
@@ -26,7 +28,7 @@ resource "aws_subnet" "public" {
   tags                    = merge(
     var.common_tags, 
     {
-      Name                        = "public-subnet-${count.index + 1}"
+      Name                        = "${var.cluster_name}-public-subnet-${count.index + 1}"
       # Tag for ALB Controller to discover public subnets
       "kubernetes.io/role/elb"    = "1"  # Indicates the subnet is eligible for internet-facing ALBs
       "kubernetes.io/cluster/${var.cluster_name}" = "shared"
@@ -38,14 +40,14 @@ resource "aws_subnet" "public" {
 # PRIVATE SUBNETS
 ######################################
 resource "aws_subnet" "private" {
-  count                   = length(var.private_subnets)       # number of public subnets
+  count                   = length(var.private_subnets)       # number of private subnets
   vpc_id                  = aws_vpc.main.id                   # vpc to place the subnet in
   cidr_block              = var.private_subnets[count.index]  # range of ips
   availability_zone       = element(var.AZs, count.index)     # picks AZ by index
   tags                    = merge(
     var.common_tags, 
     {
-      Name                              = "private-subnet-${count.index + 1}"
+      Name                              = "${var.cluster_name}-private-subnet-${count.index + 1}"
       # required for the ALB Controller to discover private subnets for creating internal ALBs 
       # (not applicable for your internet-facing ALB, but useful for future internal services)
       "kubernetes.io/role/internal-elb" = "1"  # Indicates the subnet is eligible for internal ALBs
@@ -90,13 +92,13 @@ resource "aws_route_table_association" "public" {
 ######################################
 resource "aws_eip" "nat" {
   domain = "vpc"                          # Ensures the EIP is allocated within the VPC
-  tags = merge(var.common_tags, { Name = "nat-eip" })
+  tags = merge(var.common_tags, { Name = "${var.cluster_name}-nat-eip" })
 }
 
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id  # Place NAT in first public subnet
-  tags          = merge(var.common_tags, { Name = "nat-gateway" })
+  tags          = merge(var.common_tags, { Name = "${var.cluster_name}-nat-gateway" })
 
   depends_on = [aws_internet_gateway.main]
 }

@@ -2,28 +2,36 @@
 
 # Service Accounnts with IRSA
 
-# The `aws-load-balancer-controller` Service Account is used by the ALB Controller pods to assume the IAM role via IRSA and manage ALBs.
+# The `aws-load-balancer-controller-sa` Service Account is used by the ALB Controller pods to assume the IAM role via IRSA and manage ALBs.
 resource "kubernetes_service_account" "alb_controller_service_account" {
   metadata {
-    name      = "aws-load-balancer-controller"
+    name      = "aws-load-balancer-controller-sa"
     namespace = "kube-system"
     annotations = {
-      "eks.amazonaws.com/role-arn" = var.alb_role_arn
+      "eks.amazonaws.com/role-arn" = var.alb_irsa_arn
     }
   }
 }
 
-resource "kubernetes_service_account" "devops_learning_service_account" {
+# Service Account for ASCP to assume IAM IRSA to access AWS Parameter Store
+resource "kubernetes_service_account" "ascp_service_account" {
   metadata {
-    name = "parameter-store"
-    namespace = ""
+    name      = "secrets-provider-aws-sa"
+    namespace = "kube-system"
+    # links `secrets-provider-aws-sa` to an IAM role with permissions for Parameter Store
     annotations = {
-      "eks.amazonaws.com/role-arn" = ""
+      "eks.amazonaws.com/role-arn" = var.devops_learning_irsa_arn
     }
   }
+
+  # Ensure the Service Account is created before Helm releases
+  depends_on = [
+    var.cluster_endpoint  # Ensure EKS cluster is ready
+  ]
 }
 
 
+# ----------
 # RBAC Roles: Is your way of custom-controlling who gets access to the EKS cluster via IAM.
 
 # Map IAM roles to Kubernetes users/groups in the aws-auth ConfigMap

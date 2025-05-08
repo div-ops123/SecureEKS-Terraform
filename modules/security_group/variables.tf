@@ -6,10 +6,6 @@ variable "vpc_id" {
 variable "common_tags" {
   description = "Tags used to identify resources provisioned by Terraform in this project."
   type = map(string)
-  default = {
-    Terraform   = "true"
-    Project = "eks-clw1"
-  }
 }
 
 # You can usually set cluster_control_plane_cidr to "0.0.0.0/0" to make it open if you're unsure or let AWS handle it (less secure), or use the specific CIDR given in EKS console → Networking tab.
