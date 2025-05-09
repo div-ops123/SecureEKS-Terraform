@@ -133,3 +133,26 @@ module "helm" {
   region               = var.aws_region
   depends_on           = [module.eks, module.kubernetes]
 }
+
+# # Data source to fetch the ALB created by the Ingress
+# data "kubernetes_ingress_v1" "devops_learning_frontend" {
+#   # Metadata defined in manifest to identify frontedn ingress yaml file
+#   metadata {
+#     name      = "devops-learning-frontend-ingress"
+#     namespace = "prod"
+#   }
+#   depends_on = [ module.kubernetes ]
+# }
+
+# # Data source for ALB hosted zone ID (specific to af-south-1)
+# data "aws_elb_hosted_zone_id" "main" {
+#   region = var.aws_region
+# }
+
+# module "route53" {
+#   source        = "./modules/route53"
+#   domain_name   = var.domain_name
+#   alb_dns_name  = data.kubernetes_ingress_v1.devops_learning_frontend.status[0].load_balancer[0].ingress[0].hostname
+#   alb_zone_id   = data.aws_elb_hosted_zone_id.main.id
+#   depends_on    = [data.kubernetes_ingress_v1.devops_learning_frontend]
+# }

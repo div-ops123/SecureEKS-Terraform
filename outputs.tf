@@ -102,3 +102,8 @@ output "eks_dev_user_secret_access_key" {
 output "rds_endpoint" {
   value = module.rds.rds_endpoint
 }
+
+# output "devops_learning_fqdn" {
+#   description = "The fully qualified domain name for the frontend"
+#   value       = module.route53.devops_learning_fqdn
+# }

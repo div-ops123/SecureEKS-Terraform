@@ -39,3 +39,8 @@ variable "db_name" { default = "devops_learning" }
 variable "db_username" { sensitive = true }
 variable "db_password" { sensitive = true }
 variable "secret_key" { sensitive = true }
+
+variable "domain_name" {
+  type        = string
+  description = "The domain name for Route 53 (e.g., your-domain.com)"
+}
