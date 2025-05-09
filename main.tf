@@ -2,6 +2,35 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_eks_cluster" "cluster" {
+  name       = var.cluster_name
+  depends_on = [module.eks]  # Depend on the entire eks module
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--region", var.aws_region, "--cluster-name", data.aws_eks_cluster.cluster.name] # Auth via AWS CLI
+  }
+}
+
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--region", var.aws_region, "--cluster-name", data.aws_eks_cluster.cluster.name] # Auth via AWS CLI
+    }
+  }
+}
+
+
 module "vpc" {
   source = "./modules/vpc"
 
@@ -74,27 +103,33 @@ module "ssm" {
   rds_endpoint = module.rds.rds_endpoint
 }
 
-module "kubernetes" {
-  source                          = "./modules/eks_addons/kubernetes"  
 
-  # Optionally override variables if needed
+module "kubernetes" {
+  source                    = "./modules/eks_addons/kubernetes"  
+  providers = {
+    kubernetes = kubernetes
+  }
+
   cluster_name              = module.eks.cluster_name
-  cluster_arn               = module.eks.cluster_arn
-  cluster_endpoint          = module.eks.cluster_endpoint
-  cluster_ca                = module.eks.cluster_ca_certificate
+  region                    = var.aws_region
+  cluster_endpoint          = data.aws_eks_cluster.cluster.endpoint
   node_role_arn             = module.iam.eks_node_group_arn
   eks_admin_role_arn        = module.iam.eks_admin_role_arn
   dev_role_arn              = module.iam.eks_dev_role_arn
   cicd_role_arn             = module.iam.eks_cicd_role_arn
   alb_irsa_arn              = module.iam.alb_irsa_arn
   devops_learning_irsa_arn  = module.iam.devops_learning_irsa_arn
+  depends_on                = [module.eks]
 }
 
 module "helm" {
   source               = "./modules/eks_addons/helm"
+  providers = {
+    helm = helm
+  }
 
   cluster_name         = module.eks.cluster_name
-  cluster_endpoint     = module.eks.cluster_endpoint
   vpc_id               = module.vpc.vpc_id
   region               = var.aws_region
+  depends_on           = [module.eks, module.kubernetes]
 }

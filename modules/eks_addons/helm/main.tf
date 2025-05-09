@@ -1,3 +1,16 @@
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+}
+
+terraform {
+  required_providers {
+    helm = {
+      source = "hashicorp/helm"
+      version = ">= 2.15.0"
+    }
+  }
+}
+
 # Installs the AWS Load Balancer Controller on your EKS cluster to manage ALBs for Ingress traffic routing
 resource "helm_release" "alb_controller" {
   name       = "aws-load-balancer-controller"
@@ -6,8 +19,12 @@ resource "helm_release" "alb_controller" {
   namespace  = "kube-system"   # Deploys the controller in the kube-system namespace
 
   set {
+    name = "rbac.create"
+    value = "true"
+  }
+  set {
     name  = "clusterName"
-    value = var.cluster_name
+    value = data.aws_eks_cluster.cluster.name
   }
   set {
     name  = "region"
@@ -25,6 +42,7 @@ resource "helm_release" "alb_controller" {
     name  = "serviceAccount.name"
     value = "aws-load-balancer-controller-sa"  # Matches kubernetes_service_account in kubernetes/
   }
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 
@@ -42,7 +60,7 @@ resource "helm_release" "csi_secrets_store" {
   # Configure cluster name for context
   set {
     name  = "clusterName"
-    value = var.cluster_name
+    value = data.aws_eks_cluster.cluster.name
   }
 
   # Enable sync of secrets to Kubernetes Secrets
@@ -61,11 +79,9 @@ resource "helm_release" "csi_secrets_store" {
   }
 
   # Ensure the Helm release depends on the EKS cluster and Kubernetes provider
-  depends_on = [
-    var.cluster_endpoint,     # Ensure EKS cluster is ready
-    # var.ascp_service_account  # Ensure ASCP Service Account is created
-  ]
+  depends_on = [data.aws_eks_cluster.cluster]
 }
+
 
 # Install the (ASCP) to fetch secrets/parameters from AWS Secrets Manager and Parameter Store.
 resource "helm_release" "secrets_provider_aws" {
@@ -75,16 +91,16 @@ resource "helm_release" "secrets_provider_aws" {
   namespace  = "kube-system"
   version    = "1.0.1"  # Use a specific version (check latest at https://github.com/aws/secrets-store-csi-driver-provider-aws/releases)
 
-  # Configure cluster name for context
-  set {
-    name  = "clusterName"
-    value = var.cluster_name
-  }
-
   # Use the chart default RBAC
   set {
     name = "rbac.create"
     value = "true"
+  }
+
+  # Configure cluster name for context
+  set {
+    name  = "clusterName"
+    value = var.cluster_name
   }
 
   # Use the existing Service Account
@@ -101,6 +117,6 @@ resource "helm_release" "secrets_provider_aws" {
   # Ensure ASCP depends on the CSI Driver
   depends_on = [
     helm_release.csi_secrets_store,
-    # var.ascp_service_account  # points to the resource not string
+    data.aws_eks_cluster.cluster
   ]
 }

@@ -4,10 +4,8 @@ variable "cluster_name" {
   type        = string
 }
 
-# The arn of the EKS cluster
-variable "cluster_arn" {
-  description = "The ARN of the EKS cluster."
-  type        = string
+variable "region" {
+  type = string
 }
 
 # The API server endpoint of the EKS cluster
@@ -17,10 +15,10 @@ variable "cluster_endpoint" {
 }
 
 # The base64-encoded CA certificate for connecting securely to the EKS cluster
-variable "cluster_ca" {
-  description = "The base64-encoded certificate authority data required to establish secure communication with the EKS API server."
-  type        = string
-}
+# variable "cluster_ca" {
+#   description = "The base64-encoded certificate authority data required to establish secure communication with the EKS API server."
+#   type        = string
+# }
 
 # The IAM role ARN used by the EKS worker nodes (for aws-auth ConfigMap)
 variable "node_role_arn" {

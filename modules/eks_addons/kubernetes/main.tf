@@ -1,4 +1,17 @@
 # --- RBAC roles and Service Accounts ---
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+  depends_on = [var.cluster_endpoint] # Ensure cluster is ready
+}
+
+terraform {
+  required_providers {
+    kubernetes = {
+      source = "hashicorp/kubernetes"
+      version = "2.36.0"
+    }
+  }
+}
 
 # Service Accounnts with IRSA
 
@@ -11,6 +24,7 @@ resource "kubernetes_service_account" "alb_controller_service_account" {
       "eks.amazonaws.com/role-arn" = var.alb_irsa_arn
     }
   }
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 # Service Account for ASCP to assume IAM IRSA to access AWS Parameter Store
@@ -25,9 +39,7 @@ resource "kubernetes_service_account" "ascp_service_account" {
   }
 
   # Ensure the Service Account is created before Helm releases
-  depends_on = [
-    var.cluster_endpoint  # Ensure EKS cluster is ready
-  ]
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 
@@ -66,6 +78,7 @@ resource "kubernetes_config_map_v1_data" "aws_auth_patch" {
     ])
   }
   force = true
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 
@@ -87,13 +100,14 @@ resource "kubernetes_cluster_role_binding" "admin" {
     name      = "system:masters"              # This is the group our IAM role was mapped to via aws-auth
     api_group = "rbac.authorization.k8s.io"
   }
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 
 # Prod Namespace - CI/CD (edit access)
 resource "kubernetes_role_binding" "prod_editors" {
   # Ensure namespace is created before binding
-  depends_on = [ kubernetes_namespace.prod ]
+  depends_on = [ kubernetes_namespace.prod, data.aws_eks_cluster.cluster ]
 
   metadata {
     name      = "prod-editors-binding"     # Binding name
@@ -118,7 +132,7 @@ resource "kubernetes_role_binding" "prod_editors" {
 # Dev Namespace - Developers (read-only)
 resource "kubernetes_role_binding" "dev_viewers" {
   # Ensure namespace is created before binding
-  depends_on = [ kubernetes_namespace.dev ]
+  depends_on = [ data.aws_eks_cluster.cluster, kubernetes_namespace.dev ]
 
   metadata {
     name      = "dev-viewers-binding"      # Binding name
@@ -151,6 +165,7 @@ resource "kubernetes_role" "view_rbac" {
     resources  = ["rolebindings", "roles"]
     verbs      = ["get", "list", "watch"]
   }
+  depends_on = [data.aws_eks_cluster.cluster]
 }
 
 # Bind the view-rbac Role to the dev-viewers group
@@ -169,4 +184,5 @@ resource "kubernetes_role_binding" "dev_viewers_rbac" {
     name      = "dev-viewers"
     api_group = "rbac.authorization.k8s.io"
   }
+  depends_on = [data.aws_eks_cluster.cluster]
 }

@@ -211,7 +211,7 @@ resource "aws_iam_role" "devops_learning_irsa" {
         Principal = {
           Federated = "arn:aws:iam::${var.aws_account_id}:oidc-provider/${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}"
         }
-        Action = "sts.AssumeRoleWithWebIdentity"
+        Action = "sts:AssumeRoleWithWebIdentity"
         # On behalf of `secrets-provider-aws-sa` service account
         Condition = {
           StringEquals = {
@@ -233,20 +233,6 @@ resource "aws_iam_role_policy_attachment" "devops_learning_irsa_policy" {
   role = aws_iam_role.devops_learning_irsa.name
   policy_arn = aws_iam_policy.parameter_store_policy.arn
 }
-
-# --- END ---
-
-
-# # --- START ---
-# resource "aws_iam_policy" "ascp_policy" {
-  
-# }
-
-# resource "aws_iam_role" "ascp_irsa" {
-  
-# }
-
-
 # --- END ---
 
 

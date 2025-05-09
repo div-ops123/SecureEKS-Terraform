@@ -57,6 +57,23 @@ This project deploys a secure EKS cluster in a custom VPC with public and privat
 - Implemented health checks (/health) to ensure reliable traffic routing.
 - Provisioned an IRSA-enabled IAM role (EKSALBRole) using Terraform for secure ALB management.
 
+---
+# Errors Faced and Solutions:
+1. Your previous terraform apply failed because the Kubernetes provider tried to connect to http://localhost (default endpoint) instead of the EKS cluster’s endpoint. This happened because the provider wasn’t configured with the cluster’s details, and your local kubeconfig wasn’t set up.
+Solution:
+
+
+---
+2. **Legacy Modules:** A Terraform module is considered "legacy" if it contains its own provider block (e.g., provider "kubernetes" in modules/eks_addons/kubernetes/main.tf). Legacy modules cannot use count, for_each, or depends_on because Terraform cannot resolve provider configurations dynamically in these cases.
+
+- **Fix:** Remove Provider Configurations from Modules
+To resolve the error, you need to:
+
+1. Move provider configurations to root main.tf.
+2. Pass providers to the kubernetes and helm modules using provider inheritance.
+3. Keep the depends_on clauses to ensure the EKS cluster and node group are created before the add-ons.
+---
+
 ## Contributing
 
 Contributions are welcome for bug fixes or documentation improvements. Please:

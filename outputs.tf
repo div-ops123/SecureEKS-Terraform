@@ -98,3 +98,7 @@ output "eks_dev_user_secret_access_key" {
   value       = module.iam.eks_dev_user_secret_access_key
   sensitive   = true
 }
+
+output "rds_endpoint" {
+  value = module.rds.rds_endpoint
+}
