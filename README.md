@@ -24,6 +24,59 @@ To use this project, ensure you have the following:
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) for interacting with the EKS cluster.
 - [jq](https://stedolan.github.io/jq/) for parsing JSON in access scripts.
 
+
+---
+
+## How To Start Frash
+
+1. **Delete the Terraform State File from S3**
+   - Remove the state file `eks-terraform/terraform.tfstate` from the S3 bucket `divine-eks-terraform-state`.
+   - Since versioning is enabled, you need to ensure all versions of the state file are deleted to prevent Terraform from accessing historical states.
+
+```bash
+aws s3 rm s3://divine-eks-terraform-state/eks-terraform/terraform.tfstate
+```
+
+   - If you’re sure no other state files in the bucket are needed, you can delete all objects in the bucket:
+       ```bash
+       aws s3 rm s3://divine-eks-terraform-state --recursive
+       ```
+
+2. **Clear the DynamoDB Lock Table**
+   - Check for any lock entries in the `eks-terraform-locks` DynamoDB table associated with your state file.
+```bash
+aws dynamodb delete-table --table-name eks-terraform-locks || true
+```
+
+3. **Clean Up Local Files**
+   - Remove the local Terraform files and directories in your working directory to ensure no cached state or configuration interferes:
+```bash
+rm -rf .terraform .tfstate.backup .terraform.lock.hcl
+```
+
+### How To Run first time:
+- follow from here
+# Comment out backend "s3" block in backend.tf, and ensure no module is defined in root main.tf
+
+4. **Reinitialize Terraform**
+   - Run `terraform init` to reinitialize the working directory with the S3 backend. Since the state file and lock entries are deleted, Terraform will treat this as a fresh initialization with no prior state.
+```bash
+terraform init && terraform plan
+```
+
+# Uncomment backend "s3" block in backend.tf
+
+# Reinitialize with S3 backend
+
+### Important Notes
+- **Backup First**: Before deleting the S3 state file or DynamoDB entries, consider downloading the state file from S3 as a backup:
+```bash
+aws s3 cp s3://divine-eks-terraform-state/eks-terraform/terraform.tfstate terraform.tfstate.backup
+```
+  This ensures you can recover if you accidentally delete critical state data.
+
+---
+
 ## Architecture
 
 This project deploys a secure EKS cluster in a custom VPC with public and private subnets. IAM roles control access to the cluster, while Kubernetes RBAC enforces namespace-specific permissions. The setup integrates with GitHub Actions for CI/CD deployments to the `prod` namespace.
@@ -92,14 +145,22 @@ Created by Divine Nwadigo.
 
 ---
 ```bash
+aws eks update-kubeconfig --region af-south-1 --name my-first-cluster
+
 # Verify Helm releases:
 helm list -n kube-system
+kubectl get pods -n kube-system
 
-# Confirm ASCP RBAC is enabled (default or manifest):
+# Confirm ASCP and ALB RBAC:
 kubectl get clusterrole secrets-provider-aws-role
 kubectl get clusterrolebinding secrets-provider-aws-binding
 
+kubectl get clusterrole aws-load-balancer-controller
+kubectl get clusterrolebinding aws-load-balancer-controller-binding
+
 # Apply
 terraform init
-terraform apply -var-file=secrets.tfvars
+terraform apply
 ```
+
+If no pods are found, manually install the Helm charts to debug:

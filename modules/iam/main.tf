@@ -131,7 +131,8 @@ resource "aws_iam_policy" "alb_controller_policy" {
           "iam:CreateServiceLinkedRole",
           "waf-regional:*",
           "wafv2:*",
-          "shield:*"
+          "shield:*",
+          "iam:ListRoles"
         ]
         Resource = "*"
       }
@@ -191,6 +192,7 @@ resource "aws_iam_policy" "parameter_store_policy" {
         Action = [
           "ssm:GetParameter",
           "ssm:GetParameters",
+          "ssm:GetParametersByPath"
         ]
         Resource = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/devops-learning/*"        
       }

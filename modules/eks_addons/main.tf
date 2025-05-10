@@ -23,6 +23,5 @@ module "helm" {
   vpc_id           = var.vpc_id
   region           = var.region
   cluster_name     = data.aws_eks_cluster.cluster.name
-  cluster_endpoint = data.aws_eks_cluster.cluster.endpoint
   depends_on       = [data.aws_eks_cluster.cluster]
 }

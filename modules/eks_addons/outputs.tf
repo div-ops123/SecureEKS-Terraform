@@ -1,3 +1,3 @@
-output "ascp_service_account" {
-  value = module.kubernetes.ascp_service_account
+output "secrets_provider_aws" {
+  value = module.kubernetes.secrets_provider_aws
 }

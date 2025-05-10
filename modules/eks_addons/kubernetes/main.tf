@@ -28,7 +28,7 @@ resource "kubernetes_service_account" "alb_controller_service_account" {
 }
 
 # Service Account for ASCP to assume IAM IRSA to access AWS Parameter Store
-resource "kubernetes_service_account" "ascp_service_account" {
+resource "kubernetes_service_account" "secrets_provider_aws" {
   metadata {
     name      = "secrets-provider-aws-sa"
     namespace = "kube-system"
@@ -45,6 +45,112 @@ resource "kubernetes_service_account" "ascp_service_account" {
 
 # ----------
 # RBAC Roles: Is your way of custom-controlling who gets access to the EKS cluster via IAM.
+
+# RBAC for AWS Load Balancer Controller
+# Defines a ClusterRole named "aws-load-balancer-controller" to grant permissions needed by the AWS Load Balancer Controller.
+resource "kubernetes_cluster_role" "alb_controller" {
+  metadata {
+    name = "aws-load-balancer-controller" # Name of the ClusterRole, matching the expected name by the Helm chart.
+  }
+
+  # Rule 1: Allows the controller to read (get, list, watch) Ingresses, Services, Pods, and Nodes.
+  # This enables the controller to discover Ingresses and Services to create ALBs and query Pods/Nodes for routing.
+  rule {
+    api_groups = ["", "extensions", "networking.k8s.io"]  # Covers core API (""), legacy extensions, and networking.k8s.io APIs.
+    resources  = [ "ingresses", "services", "pods", "nodes" ]  # Resources the controller needs to manage or query.
+    verbs      = [ "get", "list", "watch" ]  # Read-only operations for monitoring and discovery.
+  }
+
+  # Rule 2: Allows the controller to update the status of Ingress resources.
+  # This is needed to report the ALB's DNS name back to the Ingress status.
+  rule {
+    api_groups = ["", "extensions", "networking.k8s.io"]  # Same API groups for Ingress.
+    resources  = [ "ingresses/status" ]  # Specifically the status subresource of Ingresses.
+    verbs      = [ "update" ]  # Allows updating the Ingress status.
+  }
+
+  # Ensures the EKS cluster is provisioned before creating the ClusterRole.
+  depends_on = [data.aws_eks_cluster.cluster]
+}
+
+# Binds the aws-load-balancer-controller ClusterRole to the aws-load-balancer-controller-sa ServiceAccount.
+# This grants the permissions defined in the ClusterRole to the ServiceAccount used by the controller's pods.
+resource "kubernetes_cluster_role_binding" "alb_controller" {
+  metadata {
+    name = "aws-load-balancer-controller-binding"  # Name of the ClusterRoleBinding.
+  }
+
+  # References the ClusterRole created above.
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"  # RBAC API group.
+    kind      = "ClusterRole"  # Type of role being referenced.
+    name      = kubernetes_cluster_role.alb_controller.metadata[0].name  # Links to the alb_controller ClusterRole.
+  }
+
+  # Specifies the ServiceAccount that will receive the permissions.
+  subject {
+    kind = "ServiceAccount"  # Type of subject.
+    name = kubernetes_service_account.alb_controller_service_account.metadata[0].name  # Name of the ServiceAccount created in kubernetes_service_account.alb_controller_service_account.
+    namespace = kubernetes_service_account.alb_controller_service_account.metadata[0].namespace  # Namespace where the ServiceAccount resides.
+  }
+
+  # Ensures the EKS cluster is ready before creating the binding.
+  depends_on = [data.aws_eks_cluster.cluster]
+}
+
+
+# RBAC for AWS Secrets Store CSI Driver Provider (ASCP)
+# Defines a ClusterRole named "secrets-provider-aws-role" to grant permissions needed by ASCP.
+resource "kubernetes_cluster_role" "secrets_provider_aws" {
+  metadata {
+    name = "secrets-provider-aws-role"  # Name of the ClusterRole, matching the expected name by the ASCP Helm chart.
+  }
+
+  # Rule 1: Allows ASCP to read (get, list) Pods and Nodes.
+  # Needed to identify pods requesting secrets and node information for secret mounting.
+  rule {
+    api_groups = [ "" ]  # Core Kubernetes API group.
+    resources  = [ "pods", "nodes" ]  # Resources ASCP needs to query.
+    verbs      = [ "get", "list" ]  # Read-only operations.
+  }
+
+  # Rule 2: Allows ASCP to read and watch SecretProviderClasses.
+  # Needed to process SecretProviderClass resources (e.g., devops-learning-secrets) for fetching secrets from AWS.
+  rule {
+    api_groups = [ "secrets-store.csi.x-k8s.io" ]  # Custom API group for Secrets Store CSI Driver.
+    resources  = [ "secretproviderclasses" ]  # Custom resource defining secret sources.
+    verbs      = [ "get", "list", "watch" ]  # Read and monitor SecretProviderClasses.
+  }
+
+  # Ensures the EKS cluster is provisioned before creating the ClusterRole.
+  depends_on = [data.aws_eks_cluster.cluster]
+}
+
+# Binds the secrets-provider-aws-role ClusterRole to the secrets-provider-aws-sa ServiceAccount.
+# This grants the permissions defined in the ClusterRole to the ServiceAccount used by ASCP pods.
+resource "kubernetes_cluster_role_binding" "secrets_provider_aws" {
+  metadata {
+    name = "secrets-provider-aws-binding"  # Name of the ClusterRoleBinding.
+  }
+
+  # References the ClusterRole created above.
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"  # RBAC API group.
+    kind      = "ClusterRole"  # Type of role being referenced.
+    name      = kubernetes_cluster_role.secrets_provider_aws.metadata[0].name  # Links to the secrets_provider_aws ClusterRole.
+  }
+
+  subject {
+    kind = "ServiceAccount"  # Type of subject.
+    name = kubernetes_service_account.secrets_provider_aws.metadata[0].name  # Name of the ServiceAccount created in kubernetes_service_account.ascp_service_account.
+    namespace = kubernetes_service_account.secrets_provider_aws.metadata[0].namespace  # Namespace where the ServiceAccount resides.
+  }
+
+  # Ensures the EKS cluster is ready before creating the binding.
+  depends_on = [data.aws_eks_cluster.cluster]
+}
+
+
 
 # Map IAM roles to Kubernetes users/groups in the aws-auth ConfigMap
 # resource "kubernetes_config_map" "aws_auth" {
@@ -116,7 +222,7 @@ resource "kubernetes_role_binding" "prod_editors" {
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"              # eferences the predefined `edit` ClusterRole, which is a built-in Kubernetes role.
+    kind      = "ClusterRole"              # References the predefined `edit` ClusterRole, which is a built-in Kubernetes role.
     name      = "edit"                     # Predefined cluster role that allows read/write access
   }
 
@@ -141,7 +247,7 @@ resource "kubernetes_role_binding" "dev_viewers" {
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"              # eferences the predefined `view` ClusterRole, which is a built-in Kubernetes role.
+    kind      = "ClusterRole"              # References the predefined `view` ClusterRole, which is a built-in Kubernetes role.
     name      = "view"                     # Predefined cluster role that allows read-only access
   }
 

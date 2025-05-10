@@ -18,10 +18,10 @@ resource "helm_release" "alb_controller" {
   chart      = "aws-load-balancer-controller"
   namespace  = "kube-system"   # Deploys the controller in the kube-system namespace
 
-  set {
-    name = "rbac.create"
-    value = "true"
-  }
+  # set {
+  #   name = "rbac.create"
+  #   value = "true"
+  # }
   set {
     name  = "clusterName"
     value = data.aws_eks_cluster.cluster.name
@@ -92,10 +92,10 @@ resource "helm_release" "secrets_provider_aws" {
   version    = "1.0.1"  # Use a specific version (check latest at https://github.com/aws/secrets-store-csi-driver-provider-aws/releases)
 
   # Use the chart default RBAC
-  set {
-    name = "rbac.create"
-    value = "true"
-  }
+  # set {
+  #   name = "rbac.create"
+  #   value = "true"
+  # }
 
   # Configure cluster name for context
   set {
