@@ -107,19 +107,7 @@ resource "aws_iam_policy" "alb_controller_policy" {
         Effect = "Allow"
         Action = [
           "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress"
-        ]
-        Resource = "*"
-        Condition = {
-          Null = {
-            "aws:ResourceTag/kubernetes.io/cluster/${var.eks_cluster_name}" = "false"
-          }
-        }
-      },
-      # Add other permissions from iam-policy.json (abridged for brevity)
-      {
-        Effect = "Allow"
-        Action = [
+          "ec2:RevokeSecurityGroupIngress",
           "acm:DescribeCertificate",
           "acm:ListCertificates",
           "acm:GetCertificate",
@@ -195,6 +183,11 @@ resource "aws_iam_policy" "parameter_store_policy" {
           "ssm:GetParametersByPath"
         ]
         Resource = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/devops-learning/*"        
+      },
+      {
+        Effect = "Allow"
+        Action = "kms:Decrypt"
+        Resource = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"  # Replace with specific KMS key ARN if known
       }
     ]
   })
@@ -217,7 +210,7 @@ resource "aws_iam_role" "devops_learning_irsa" {
         # On behalf of `secrets-provider-aws-sa` service account
         Condition = {
           StringEquals = {
-            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:secrets-provider-aws-sa"
+            "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub" = var.secrets_provider_aws_subject
           }
         }
       }

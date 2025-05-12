@@ -115,7 +115,6 @@ This project deploys a secure EKS cluster in a custom VPC with public and privat
 1. Your previous terraform apply failed because the Kubernetes provider tried to connect to http://localhost (default endpoint) instead of the EKS cluster’s endpoint. This happened because the provider wasn’t configured with the cluster’s details, and your local kubeconfig wasn’t set up.
 Solution:
 
-
 ---
 2. **Legacy Modules:** A Terraform module is considered "legacy" if it contains its own provider block (e.g., provider "kubernetes" in modules/eks_addons/kubernetes/main.tf). Legacy modules cannot use count, for_each, or depends_on because Terraform cannot resolve provider configurations dynamically in these cases.
 
@@ -125,6 +124,57 @@ To resolve the error, you need to:
 1. Move provider configurations to root main.tf.
 2. Pass providers to the kubernetes and helm modules using provider inheritance.
 3. Keep the depends_on clauses to ensure the EKS cluster and node group are created before the add-ons.
+---
+
+3. **Kubernetes Namespace Not Deleting Errors**
+- Diagnosed and resolved stuck Kubernetes namespace by removing Ingress finalizers, ensuring complete EKS cluster cleanup.
+
+#### Symptoms
+- `terraform destroy` fails with `context deadline exceeded` for a namespace (e.g., `prod`).
+- Resources like Ingresses, deployments, or secrets prevent deletion.
+
+#### Step-by-Step Troubleshooting and Fix
+
+1. **Check Namespace Status**:
+   ```bash
+   kubectl get namespace prod -o yaml
+   ```
+   - Look for `status.phase: Terminating` and `spec.finalizers: [kubernetes]`.
+   - Check `status.conditions` for messages like `SomeResourcesRemain` or `SomeFinalizersRemain`.
+
+3. **Delete Remaining Resources**
+
+4. **Handle Stuck Ingress (AWS Load Balancer Controller)**:
+   - If Ingress deletion times out (`error: timed out waiting for the condition`):
+     ```bash
+     kubectl get ingress devops-learning-frontend-ingress -n prod -o yaml
+     ```
+     Check for finalizers like `group.ingress.k8s.aws/my-first-cluster.alb-group`.
+   - Remove Ingress finalizer:
+     ```bash
+     kubectl patch ingress devops-learning-frontend-ingress -n prod -p '{"metadata":{"finalizers":null}}' --type=merge
+     ```
+   - Verify deletion:
+     ```bash
+     kubectl get ingress -n prod
+     kubectl get namespace -n prod
+     ```
+
+5. **Check for Orphaned ALBs**:
+   ```bash
+   aws elbv2 describe-load-balancers --region af-south-1
+   ```
+   Delete if present:
+   ```bash
+   aws elbv2 delete-load-balancer --load-balancer-arn <alb-arn> --region af-south-1
+   ```
+
+7. **Retry terraform destroy**:
+   ```bash
+   terraform destroy -auto-approve
+   ```
+
+
 ---
 
 ## Contributing
@@ -152,7 +202,7 @@ helm list -n kube-system
 kubectl get pods -n kube-system
 
 # Confirm ASCP and ALB RBAC:
-kubectl get clusterrole secrets-provider-aws-role
+kubectl get clusterrole secrets-provider-aws-role -o yaml
 kubectl get clusterrolebinding secrets-provider-aws-binding
 
 kubectl get clusterrole aws-load-balancer-controller
@@ -162,5 +212,3 @@ kubectl get clusterrolebinding aws-load-balancer-controller-binding
 terraform init
 terraform apply
 ```
-
-If no pods are found, manually install the Helm charts to debug:

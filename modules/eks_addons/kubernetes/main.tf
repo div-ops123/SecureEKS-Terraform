@@ -19,7 +19,7 @@ terraform {
 resource "kubernetes_service_account" "alb_controller_service_account" {
   metadata {
     name      = "aws-load-balancer-controller-sa"
-    namespace = "kube-system"
+    namespace = "kube-system"  # Because the AWS Load Balancer Controller is a cluster-wide component managing ALBs for all namespaces.
     annotations = {
       "eks.amazonaws.com/role-arn" = var.alb_irsa_arn
     }
@@ -31,7 +31,8 @@ resource "kubernetes_service_account" "alb_controller_service_account" {
 resource "kubernetes_service_account" "secrets_provider_aws" {
   metadata {
     name      = "secrets-provider-aws-sa"
-    namespace = "kube-system"
+    # Pods automatically look for ServiceAccounts in their own namespace
+    namespace = kubernetes_namespace.prod.metadata[0].name  # same namespace as Pods. Resolves to "prod"
     # links `secrets-provider-aws-sa` to an IAM role with permissions for Parameter Store
     annotations = {
       "eks.amazonaws.com/role-arn" = var.devops_learning_irsa_arn

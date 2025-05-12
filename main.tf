@@ -75,6 +75,7 @@ module "iam" {
   eks_admin_user_name  = "daniel"
   eks_dev_user_name    = "mathins"
   aws_region           = var.aws_region
+  secrets_provider_aws_subject = module.kubernetes.secrets_provider_aws_subject
   common_tags          = var.common_tags
 }
 

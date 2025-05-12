@@ -44,3 +44,8 @@ variable "eks_dev_user_name" {
 variable "aws_region" {
   type = string
 }
+
+variable "secrets_provider_aws_subject" {
+  description = "The IRSA subject string for the ASCP ServiceAccount (system:serviceaccount:<namespace>:<name>)"
+  type       = string
+}
